@@ -9,22 +9,24 @@ logger = logging.getLogger(__name__)
 
 class StorageManager:
     def __init__(self) -> None:
-        self.endpoint = 'http://storage:9000'
+        self.endpoint = 'storage:9000'
         self.client = Minio(endpoint=self.endpoint,
                             access_key=os.getenv('MINIO_ROOT_USER'),
                             secret_key=os.getenv('MINIO_ROOT_PASSWORD'),
                             secure=False)
         self.default_bucket_name = os.getenv('MINIO_DEFAULT_BUCKETS')
     
-    def get_object(self, object_name)->pd.DataFrame | None:
+    def get_object(self, object_name, skiprows, nrows)->pd.DataFrame | None:
         try:
             df = pd.read_csv(
                 f"s3://{self.default_bucket_name}/{object_name}",
                 storage_options={
                     "key": os.getenv('MINIO_ROOT_USER'),
                     "secret": os.getenv('MINIO_ROOT_PASSWORD'),
-                    "client_kwargs": {"endpoint_url": self.endpoint}
-                }
+                    "client_kwargs": {"endpoint_url": f"http://{self.endpoint}"}
+                },
+                skiprows=skiprows,
+                nrows=nrows
             )
             return df
         except S3Error as e:
@@ -34,19 +36,17 @@ class StorageManager:
             logger.error(f"FileNotFoundError, {e}")
             return None
         
-    def put_object(self):
+    def put_object_restaurant_reviews(self):
         # 1. Download data from: https://www.kaggle.com/datasets/gorororororo23/european-restaurant-reviews
-        os.system('bash ./get_data.sh')
-        file_path = os.path.join('data','European Restaurant Reviews.csv')
-        assert os.path.exists(file_path), 'Incorrect filename'
+        fname = 'European Restaurant Reviews.csv'
+        file_path = os.path.join('data', fname)
+        if not os.path.exists(file_path):
+            os.system('bash ./get_data.sh')
 
         # 2. upload to Storage
-        file_path = "data/European Restaurant Reviews.csv"  # Path to your CSV file
-        object_name = "European Restaurant Reviews.csv"  # Name of the object to be saved in the bucket
-
         result = self.client.fput_object(
             bucket_name=self.default_bucket_name,
-            object_name=object_name,
+            object_name=fname,
             file_path=file_path)
         return result.location
 
